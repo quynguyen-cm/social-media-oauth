@@ -12,7 +12,6 @@ const Login = () => {
   const [user, setUser] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Lắng nghe trạng thái đăng nhập từ Firebase
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
@@ -21,7 +20,7 @@ const Login = () => {
         setUser(null);
       }
     });
-    return () => unsubscribe(); // Cleanup
+    return () => unsubscribe();
   }, []);
 
   const handleGoogleSignIn = async () => {
@@ -31,7 +30,6 @@ const Login = () => {
       setUser(user);
 
       const idToken = await user.getIdToken();
-      console.log("Google ID Token:", idToken);
 
       const response = await fetch(
         "https://wsdah-api.myrae.app/api/auth/google-login",
@@ -45,14 +43,12 @@ const Login = () => {
       );
 
       if (!response.ok) {
-        throw new Error(`Lỗi từ backend: ${response.statusText}`);
+        throw new Error(`Backend error: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      console.log("Backend response (Google):", data);
+      await response.json();
     } catch (error: any) {
       setError(error.message);
-      console.error("Error during Google sign-in:", error);
     }
   };
 
@@ -63,7 +59,6 @@ const Login = () => {
       setUser(user);
 
       const idToken = await user.getIdToken();
-      console.log("Facebook ID Token:", idToken);
 
       const response = await fetch(
         "https://wsdah-api.myrae.app/api/auth/facebook-login",
@@ -77,14 +72,12 @@ const Login = () => {
       );
 
       if (!response.ok) {
-        throw new Error(`Lỗi từ backend: ${response.statusText}`);
+        throw new Error(`Backend error: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      console.log("Backend response (Facebook):", data);
+      await response.json();
     } catch (error: any) {
       setError(error.message);
-      console.error("Error during Facebook sign-in:", error);
     }
   };
 
@@ -101,18 +94,31 @@ const Login = () => {
       );
 
       if (!response.ok) {
-        throw new Error(`Lỗi khi gọi API LinkedIn: ${response.statusText}`);
+        throw new Error(`Error calling LinkedIn API: ${response.statusText}`);
       }
 
-      const data: { authUrl: string } = await response.json();
-      if (!data.authUrl) {
-        throw new Error("Không tìm thấy authUrl trong response");
+      const data: { authUrl: string; state: string } = await response.json();
+      if (!data.authUrl || !data.state) {
+        throw new Error("authUrl or state not found in response");
       }
 
+      // Save state for verification after callback
+      localStorage.setItem("linkedin_state", data.state);
+
+      // Redirect to authUrl
       window.location.href = data.authUrl;
     } catch (error: any) {
       setError(error.message);
-      console.error("Error during LinkedIn sign-in:", error);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await auth.signOut();
+      localStorage.removeItem("user");
+      localStorage.removeItem("linkedin_state");
+    } catch (error: any) {
+      setError(error.message);
     }
   };
 
@@ -121,17 +127,17 @@ const Login = () => {
       <h2>Firebase OAuth with React</h2>
       {user ? (
         <div>
-          <p>Chào mừng, {user.displayName || "Người dùng"}</p>
-          <button onClick={() => auth.signOut()}>Đăng xuất</button>
+          <p>Welcome, {user.displayName || "User"}</p>
+          <button onClick={handleSignOut}>Sign Out</button>
         </div>
       ) : (
         <div>
-          <button onClick={handleGoogleSignIn}>Đăng nhập với Google</button>
+          <button onClick={handleGoogleSignIn}>Sign in with Google</button>
           <button onClick={handleFacebookSignIn} style={{ marginLeft: "10px" }}>
-            Đăng nhập với Facebook
+            Sign in with Facebook
           </button>
           <button onClick={handleLinkedInSignIn} style={{ marginLeft: "10px" }}>
-            Đăng nhập với LinkedIn
+            Sign in with LinkedIn
           </button>
         </div>
       )}

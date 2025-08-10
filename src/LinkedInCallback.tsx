@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { auth, signInWithCustomToken, updateProfile } from "./firebase";
+import { useEffect, useState, useRef } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
 
 interface LinkedInAuthResponse {
   message: string;
@@ -14,24 +13,36 @@ interface LinkedInAuthResponse {
   };
   access_token: string;
   refresh_token: string;
-  firebase_token: string;
 }
 
 const LinkedInCallback = () => {
   const [searchParams] = useSearchParams();
   const [authData, setAuthData] = useState<LinkedInAuthResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const navigate = useNavigate();
+  const hasCalled = useRef(false); // Track if API was already called
 
   useEffect(() => {
+    if (hasCalled.current) return; // Prevent second call
+    hasCalled.current = true;
+
     const handleCallback = async () => {
       try {
+        setIsLoading(true);
         const code = searchParams.get("code");
+        const state = searchParams.get("state");
+        const storedState = localStorage.getItem("linkedin_state");
+
         if (!code) {
-          throw new Error("Không tìm thấy code trong query params");
+          throw new Error("Authorization code is missing in query parameters");
+        }
+        if (!state || !storedState || state !== storedState) {
+          throw new Error("State mismatch or missing");
         }
 
         const response = await fetch(
-          `https://wsdah-api.myrae.app/api/auth/linkedin/callback?code=${code}`,
+          `https://wsdah-api.myrae.app/api/auth/linkedin/callback?code=${code}&state=${state}`,
           {
             method: "GET",
             headers: {
@@ -41,57 +52,73 @@ const LinkedInCallback = () => {
         );
 
         if (!response.ok) {
+          const errorText = await response.text();
           throw new Error(
-            `Lỗi khi xử lý callback từ LinkedIn: ${response.statusText}`
+            `Callback API failed: ${response.status} - ${errorText}`
           );
         }
 
         const data: LinkedInAuthResponse = await response.json();
         setAuthData(data);
 
-        // Đăng nhập vào Firebase với firebase_token
-        const userCredential = await signInWithCustomToken(
-          auth,
-          data.firebase_token
-        );
+        const userData = {
+          sub: data.user.sub,
+          email: data.user.email || "N/A",
+          username: data.user.username || "User",
+          avatar: data.user.avatar || "",
+        };
+        localStorage.setItem("user", JSON.stringify(userData));
 
-        // Cập nhật thông tin profile Firebase
-        await updateProfile(userCredential.user, {
-          displayName: data.user.username,
-          photoURL: data.user.avatar,
-        });
+        localStorage.removeItem("linkedin_state");
 
-        // Lưu token và thông tin người dùng vào localStorage
-        localStorage.setItem("access_token", data.access_token);
-        localStorage.setItem("refresh_token", data.refresh_token);
-        localStorage.setItem("firebase_token", data.firebase_token);
-        localStorage.setItem("user", JSON.stringify(data.user));
-
-        // Chuyển hướng người dùng sau khi đăng nhập thành công
-        window.location.href = "/dashboard";
+        const redirectTo =
+          localStorage.getItem("redirect_after_login") || "/dashboard";
+        localStorage.removeItem("redirect_after_login");
+        navigate(redirectTo);
       } catch (err: any) {
-        setError(err.message);
-        console.error("Error during LinkedIn callback:", err);
+        setError(err.message || "An unexpected error occurred");
+      } finally {
+        setIsLoading(false);
       }
     };
 
     handleCallback();
-  }, [searchParams]);
+  }, [searchParams, navigate]);
+
+  if (isLoading) {
+    return (
+      <div style={{ textAlign: "center", padding: "50px" }}>
+        <div>Loading...</div>
+        <div>Please wait while we process your login.</div>
+      </div>
+    );
+  }
 
   if (error) {
-    return <div>Lỗi: {error}</div>;
+    return (
+      <div style={{ textAlign: "center", padding: "50px", color: "red" }}>
+        <h2>Error</h2>
+        <p>{error}</p>
+        <button onClick={() => navigate("/login")}>Try Again</button>
+      </div>
+    );
   }
 
   if (!authData) {
-    return <div>Đang xử lý đăng nhập...</div>;
+    return null;
   }
 
+  const safeUsername = authData.user.username || "User";
+  const safeEmail = authData.user.email || "N/A";
+  const safeAvatar = authData.user.avatar || "";
+
   return (
-    <div>
-      <h1>Đăng nhập thành công!</h1>
-      <p>Chào mừng: {authData.user.username}</p>
-      <p>Email: {authData.user.email || "Không có"}</p>
-      <img src={authData.user.avatar} alt="Avatar" width={100} />
+    <div style={{ textAlign: "center", padding: "50px" }}>
+      <h1>Login Successful!</h1>
+      <p>Welcome: {safeUsername}</p>
+      <p>Email: {safeEmail}</p>
+      {safeAvatar && <img src={safeAvatar} alt="Avatar" width={100} />}
+      <button onClick={() => navigate("/dashboard")}>Go to Dashboard</button>
     </div>
   );
 };
