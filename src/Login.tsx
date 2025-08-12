@@ -32,7 +32,7 @@ const Login = () => {
       const idToken = await user.getIdToken();
 
       const response = await fetch(
-        "https://wsdah-api.myrae.app/api/auth/google-login",
+        "http://localhost:8000/api/auth/google-login",
         {
           method: "POST",
           headers: {
@@ -61,7 +61,7 @@ const Login = () => {
       const idToken = await user.getIdToken();
 
       const response = await fetch(
-        "https://wsdah-api.myrae.app/api/auth/facebook-login",
+        "http://localhost:8000/api/auth/facebook-login",
         {
           method: "POST",
           headers: {
@@ -83,15 +83,12 @@ const Login = () => {
 
   const handleLinkedInSignIn = async () => {
     try {
-      const response = await fetch(
-        "https://wsdah-api.myrae.app/api/auth/linkedin",
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const response = await fetch("http://localhost:8000/api/auth/linkedin", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
 
       if (!response.ok) {
         throw new Error(`Error calling LinkedIn API: ${response.statusText}`);
